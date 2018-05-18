@@ -62,7 +62,7 @@ project.gradle.taskGraph.whenReady { graph ->
 
 task('updateDependencies', description: "Rebuilds spinnaker-dependencies.yml based on spring-boot-dependencies POM.") << {
   // use https://mvnrepository.com/artifact/org.springframework.boot/spring-boot-dependencies as the basis for making suggested changes to spinnaker-dependencies.yml
-  def springBootVersion = '1.5.10.RELEASE'
+  def springBootVersion = '2.0.2.RELEASE'
   println "Updating version settings based on ${springBootVersion}..."
 
   // load from template
