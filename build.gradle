@@ -60,41 +60,36 @@ project.gradle.taskGraph.whenReady { graph ->
   }
 }
 
+task('updateDependencies', description: "Rebuilds spinnaker-dependencies.yml based on spring-boot-dependencies POM.") << {
+  // use https://mvnrepository.com/artifact/org.springframework.boot/spring-boot-dependencies as the basis for making suggested changes to spinnaker-dependencies.yml
+  def springBootVersion = '1.5.10.RELEASE'
+  println "Updating version settings based on ${springBootVersion}..."
 
-task('updateDependencies', description: "Rebuilds spinnaker-dependencies.yml based on Spring's platform BOM.") << {
+  // load from template
+  def dependencies = new File('src/spinnaker-dependencies.template').text
 
-  /*
-   * Use http://platform.spring.io/platform/ as the basis for making suggested changes to spinnaker-dependencies.yml
-   */
+  def url = "https://repo.spring.io/release/org/springframework/boot/spring-boot-dependencies/${springBootVersion}/spring-boot-dependencies-${springBootVersion}.pom"
+  logger.info("loading pom file from ${url}")
+  def pom = new XmlSlurper().parse(url)
 
-  def platformVersion = 'Brussels-SR7'
+  pom.dependencyManagement.dependencies.children().each { depNode ->
+    logger.info "${depNode.groupId}:${depNode.artifactId}:${depNode.version}"
 
-  def repo = (platformVersion.endsWith('-BUILD-SNAPSHOT')) ?
-          'https://repo.spring.io/snapshot' :
-          (platformVersion.contains('-RC') || platformVersion.contains('-M')) ?
-                  'https://repo.spring.io/milestone' :
-                  'https://repo.spring.io/release'
-  def group = "io.spring.platform".replaceAll('\\.', '/')
-  def artifact = "platform-bom"
-  def path = "${repo}/${group}/${artifact}/${platformVersion}/${artifact}-${platformVersion}.properties"
+    // depNode.version can be a symbol like '${spring.version}' in 'org.springframework:spring-core:${spring.version}'
+    // we want to resolve that to an actual version number in the properties section
+    def versionSymbol = depNode.version.text()
+    def versionProperty = versionSymbol.substring(2, versionSymbol.length() - 1)
+    def versionNumber = versionSymbol.startsWith('${')
+      ? pom.properties[versionProperty].text()
+      : versionSymbol
+    logger.info "${versionProperty}: ${versionNumber}"
 
-  println "Fetching ${platformVersion} platform from ${path}..."
-
-  Properties props = new Properties()
-  path.toURL().openStream().withStream { propertyStream ->
-    props.load(propertyStream)
+    dependencies = dependencies.replaceAll("\\{\\{${depNode.groupId}:${depNode.artifactId}}}", versionNumber)
   }
 
-  def updatedListOfDeps = new File('src/spinnaker-dependencies.template').text
-
-  println "Updating version settings based on ${platformVersion}..."
-
-  props.keySet().each { lib ->
-    updatedListOfDeps = updatedListOfDeps.replaceAll('\\{\\{' + lib + '}}', props.getProperty(lib))
-  }
-
+  // write results to yml
   new File('src/spinnaker-dependencies.yml').withWriter { writer ->
-    writer.write(updatedListOfDeps)
+    writer.write(dependencies)
   }
 }
 
